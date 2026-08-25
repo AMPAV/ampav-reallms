@@ -1,6 +1,6 @@
 [project]
 name = "ampav-reallms"
-version = "0.0.1"
+dynamic = ["version"]
 description = "REALLMS tooling for the AMPAV environment"
 readme = "README.md"
 license = "Apache-2.0"
@@ -21,6 +21,9 @@ dependencies = [
 Homepage = "https://github.com/AMPAV/ampav-reallms"
 Repository = "https://github.com/AMPAV/ampav-reallms.git"
 Issues = "https://github.com/AMPAV/ampav-reallms/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "ampav.reallms.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]
