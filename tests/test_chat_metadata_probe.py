@@ -57,6 +57,10 @@ class SanitizeResponseTest(unittest.TestCase):
             describe_completion_format({"choices": [{"message": {"content": "```json\\n{}\\n```"}}]}),
             "not strict JSON",
         )
+        self.assertEqual(
+            describe_completion_format({"choices": [{"text": '{"summary": "text"}'}]}),
+            "strict JSON object",
+        )
 
 
 if __name__ == "__main__":
