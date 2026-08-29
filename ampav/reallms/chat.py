@@ -1,4 +1,4 @@
-"""Thin clients for REALLMS completion endpoints."""
+"""Thin client for REALLMS chat completions."""
 
 from __future__ import annotations
 
@@ -10,8 +10,17 @@ from urllib.request import Request, urlopen
 from ampav.core.async_tool import ToolError
 
 
-class _ReallmsCompletionClient:
-    """Shared native request handling for REALLMS completion endpoints."""
+class ReallmsChatCompletions:
+    """Call REALLMS's native synchronous ``/chat/completions`` API.
+
+    Parameters:
+        base_url: REALLMS API base URL, without the endpoint path.
+        api_key: API key sent as a bearer token.
+        timeout: Default request timeout in seconds.
+
+    ``process`` deliberately returns the decoded native response rather than an
+    AMPAV metadata schema. Schema conversion is outside this experiment.
+    """
 
     def __init__(self, base_url: str, api_key: str, *, timeout: float = 60.0) -> None:
         if not base_url:
@@ -25,10 +34,30 @@ class _ReallmsCompletionClient:
         self.api_key = api_key
         self.timeout = timeout
 
-    def _process(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        """Submit a native request and return its decoded native response."""
+    def process(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        **request_options: Any,
+    ) -> dict[str, Any]:
+        """Submit native chat messages and return the decoded native response.
+
+        Parameters:
+            model: REALLMS model identifier.
+            messages: Native OpenAI-style chat message objects.
+            request_options: Additional native request fields, such as
+                ``temperature`` or ``response_format``.
+
+        Raises:
+            ToolError: If the service cannot be reached, rejects the request,
+                or returns a non-object JSON response.
+        """
+        if not model:
+            raise ValueError("model must not be empty")
+
+        payload = {"model": model, "messages": messages, **request_options}
         request = Request(
-            f"{self.base_url}/{endpoint}",
+            f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {self.api_key}",
@@ -41,55 +70,14 @@ class _ReallmsCompletionClient:
             with urlopen(request, timeout=self.timeout) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
-            raise ToolError(f"REALLMS {endpoint} failed with HTTP {error.code}") from error
+            raise ToolError(f"REALLMS chat completion failed with HTTP {error.code}") from error
         except URLError as error:
-            raise ToolError(f"REALLMS {endpoint} could not reach the service") from error
+            raise ToolError("REALLMS chat completion could not reach the service") from error
         except TimeoutError as error:
-            raise ToolError(f"REALLMS {endpoint} timed out") from error
+            raise ToolError("REALLMS chat completion timed out") from error
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ToolError(f"REALLMS {endpoint} returned invalid JSON") from error
+            raise ToolError("REALLMS chat completion returned invalid JSON") from error
 
         if not isinstance(decoded, dict):
-            raise ToolError(f"REALLMS {endpoint} returned a non-object JSON response")
+            raise ToolError("REALLMS chat completion returned a non-object JSON response")
         return decoded
-
-
-class ReallmsChatCompletions(_ReallmsCompletionClient):
-    """Call REALLMS's native synchronous ``/chat/completions`` API.
-
-    ``process`` deliberately returns the decoded native response rather than an
-    AMPAV metadata schema. Schema conversion is outside this experiment.
-    """
-
-    def process(
-        self,
-        model: str,
-        messages: list[dict[str, Any]],
-        **request_options: Any,
-    ) -> dict[str, Any]:
-        """Submit native chat messages and return the decoded native response."""
-        if not model:
-            raise ValueError("model must not be empty")
-        return self._process(
-            "chat/completions",
-            {"model": model, "messages": messages, **request_options},
-        )
-
-
-class ReallmsCompletions(_ReallmsCompletionClient):
-    """Call REALLMS's native synchronous ``/completions`` API.
-
-    This client is retained only to compare endpoint behavior during the
-    experiment; it does not establish a public AMPAV tool contract.
-    """
-
-    def process(self, model: str, prompt: str, **request_options: Any) -> dict[str, Any]:
-        """Submit a native prompt and return the decoded native response."""
-        if not model:
-            raise ValueError("model must not be empty")
-        if not prompt:
-            raise ValueError("prompt must not be empty")
-        return self._process(
-            "completions",
-            {"model": model, "prompt": prompt, **request_options},
-        )

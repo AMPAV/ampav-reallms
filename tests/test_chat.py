@@ -9,7 +9,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 from ampav.core.async_tool import ToolError
-from ampav.reallms import ReallmsChatCompletions, ReallmsCompletions
+from ampav.reallms import ReallmsChatCompletions
 
 
 class _Response:
@@ -81,22 +81,6 @@ class ReallmsChatCompletionsTest(unittest.TestCase):
         with self.assertRaisesRegex(ToolError, "non-object"):
             self.client.process("glm-5.2", [])
 
-    @patch("ampav.reallms.chat.urlopen")
-    def test_completions_posts_prompt_payload(self, urlopen_mock: object) -> None:
-        response = {"id": "cmpl-1", "choices": [{"text": "{}"}]}
-        urlopen_mock.return_value = _Response(json.dumps(response))  # type: ignore[attr-defined]
-
-        result = ReallmsCompletions("https://example.test/v1", "test-key").process(
-            "glm-5.2", "Summarize this text.", temperature=0
-        )
-
-        self.assertEqual(result, response)
-        request = urlopen_mock.call_args.args[0]  # type: ignore[attr-defined]
-        self.assertEqual(request.full_url, "https://example.test/v1/completions")
-        self.assertEqual(
-            json.loads(request.data.decode("utf-8")),
-            {"model": "glm-5.2", "prompt": "Summarize this text.", "temperature": 0},
-        )
 
 
 if __name__ == "__main__":
