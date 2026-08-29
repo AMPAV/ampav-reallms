@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import unittest
 
-from experiments.chat_metadata_probe import sanitize_response
+from experiments.chat_metadata_probe import (
+    describe_completion_format,
+    has_provider_reasoning,
+    sanitize_response,
+)
 
 
 class SanitizeResponseTest(unittest.TestCase):
@@ -34,6 +38,25 @@ class SanitizeResponseTest(unittest.TestCase):
         message = sanitized["choices"][0]["message"]
         self.assertNotIn("reasoning_content", message)
         self.assertEqual(message["provider_specific_fields"], {"refusal": None})
+
+    def test_describes_strict_json_and_provider_reasoning(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"summary": "text"}',
+                        "reasoning_content": "private chain",
+                    }
+                }
+            ]
+        }
+
+        self.assertEqual(describe_completion_format(response), "strict JSON object")
+        self.assertTrue(has_provider_reasoning(response))
+        self.assertEqual(
+            describe_completion_format({"choices": [{"message": {"content": "```json\\n{}\\n```"}}]}),
+            "not strict JSON",
+        )
 
 
 if __name__ == "__main__":

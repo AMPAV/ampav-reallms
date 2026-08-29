@@ -79,13 +79,48 @@ def sanitize_response(response: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
+def describe_completion_format(response: dict[str, Any]) -> str:
+    """Describe whether the first native completion content is parseable JSON."""
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return "missing first choice"
+    message = choices[0].get("message")
+    if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+        return "missing string message content"
+    try:
+        parsed = json.loads(message["content"])
+    except json.JSONDecodeError:
+        return "not strict JSON"
+    return "strict JSON object" if isinstance(parsed, dict) else "strict JSON, but not an object"
+
+
+def has_provider_reasoning(response: dict[str, Any]) -> bool:
+    """Report whether a native response exposed provider reasoning fields."""
+    choices = response.get("choices")
+    if not isinstance(choices, list):
+        return False
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            continue
+        if "reasoning_content" in message:
+            return True
+        provider_fields = message.get("provider_specific_fields")
+        if isinstance(provider_fields, dict) and "reasoning" in provider_fields:
+            return True
+    return False
+
+
 def write_run_record(
     output_dir: Path,
     arguments: argparse.Namespace,
-    response: dict[str, Any],
+    native_response: dict[str, Any],
 ) -> None:
     """Persist a selected native response and concise, credential-free metadata."""
     output_dir.mkdir(parents=True, exist_ok=False)
+    response = sanitize_response(native_response)
     manifest = {
         "timestamp": datetime.now(UTC).isoformat(),
         "api": "REALLMS /chat/completions",
@@ -114,6 +149,17 @@ def write_run_record(
     (output_dir / "input_ref.txt").write_text(
         f"fixture_id: {arguments.fixture_id}\ntext_path: {arguments.text_path}\n"
         "cleanup: no caller-owned inputs or remote resources were created\n",
+        encoding="utf-8",
+    )
+    choices = response.get("choices")
+    first_choice = choices[0] if isinstance(choices, list) and choices else {}
+    finish_reason = first_choice.get("finish_reason") if isinstance(first_choice, dict) else None
+    (output_dir / "observations.md").write_text(
+        "# Observations\n\n"
+        f"- Native finish reason: `{finish_reason}`.\n"
+        f"- Completion content: {describe_completion_format(response)}.\n"
+        f"- Provider reasoning removed from retained response: {'yes' if has_provider_reasoning(native_response) else 'no'}.\n"
+        "- Metadata quality: pending direct review.\n",
         encoding="utf-8",
     )
 
@@ -154,7 +200,7 @@ def main() -> None:
         ],
         temperature=arguments.temperature,
     )
-    write_run_record(arguments.output_dir, arguments, sanitize_response(response))
+    write_run_record(arguments.output_dir, arguments, response)
     print(arguments.output_dir)
 
 
