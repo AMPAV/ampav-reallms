@@ -1,8 +1,8 @@
 """REALLMS tools for AMPAV."""
 
-from .chat import ReallmsChatCompletions
+from .text_aboutness import ReallmsTextAboutness
 
 __version__ = "0.0.1"
 
 
-__all__ = ["ReallmsChatCompletions", "__version__"]
+__all__ = ["ReallmsTextAboutness", "__version__"]
