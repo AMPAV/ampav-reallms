@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from experiments.chat_metadata_probe import (
+from experiments.text_aboutness_probe import (
     describe_completion_format,
     has_provider_reasoning,
     sanitize_response,

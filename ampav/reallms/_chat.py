@@ -1,4 +1,4 @@
-"""Thin client for REALLMS chat completions."""
+"""Internal transport for REALLMS chat completions."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from ampav.core.async_tool import ToolError
 
 
-class ReallmsChatCompletions:
+class ReallmsChatClient:
     """Call REALLMS's native synchronous ``/chat/completions`` API.
 
     Parameters:
@@ -34,7 +34,7 @@ class ReallmsChatCompletions:
         self.api_key = api_key
         self.timeout = timeout
 
-    def process(
+    def complete(
         self,
         model: str,
         messages: list[dict[str, Any]],

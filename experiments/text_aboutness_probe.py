@@ -1,4 +1,4 @@
-"""Run one explicit native REALLMS chat-metadata experiment request."""
+"""Run one explicit native REALLMS text-aboutness experiment request."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import shlex
 import sys
 from typing import Any
 
-from ampav.reallms.chat import ReallmsChatCompletions
+from ampav.reallms import ReallmsTextAboutness
 
 
 METADATA_CATEGORIES = "summary, named entities, keyphrases, and labels"
@@ -31,8 +31,8 @@ def load_environment_file(path: Path) -> None:
         os.environ.setdefault(name, value.strip().strip('"').strip("'"))
 
 
-def build_prompt(mode: str, text: str, category: str | None, term: str | None) -> str:
-    """Build the experiment prompt while retaining provider-native output."""
+def build_prompt(mode: str, category: str | None, term: str | None) -> str:
+    """Build the experiment instruction while retaining provider-native output."""
     if mode == "combined":
         request = (
             f"Return a JSON object with {METADATA_CATEGORIES}. "
@@ -56,7 +56,7 @@ def build_prompt(mode: str, text: str, category: str | None, term: str | None) -
         )
     else:
         raise ValueError(f"unsupported mode: {mode}")
-    return f"{request}\n\nTranscript:\n{text}"
+    return request
 
 
 def sanitize_response(response: dict[str, Any]) -> dict[str, Any]:
@@ -190,14 +190,12 @@ def main() -> None:
         raise RuntimeError("REALLMS_BASE_URL and REALLMS_API_KEY must be set")
 
     text = arguments.text_path.read_text(encoding="utf-8")
-    prompt = build_prompt(arguments.mode, text, arguments.category, arguments.term)
-    client = ReallmsChatCompletions(base_url, api_key, timeout=arguments.timeout)
+    prompt = build_prompt(arguments.mode, arguments.category, arguments.term)
+    client = ReallmsTextAboutness(base_url, api_key, timeout=arguments.timeout)
     response = client.process(
-        arguments.model,
-        [
-            {"role": "system", "content": "Return JSON only. Do not add markdown fences."},
-            {"role": "user", "content": prompt},
-        ],
+        text,
+        model=arguments.model,
+        prompt=prompt,
         temperature=arguments.temperature,
     )
     write_run_record(arguments.output_dir, arguments, response)
