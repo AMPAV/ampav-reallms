@@ -1,4 +1,4 @@
-"""Run and retain one native REALLMS speech-recognition request."""
+"""Run and retain one REALLMS speech-recognition request."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import platform
 import shlex
 import sys
 from time import monotonic
-from typing import Any
 
+from ampav.core.schema import ToolOutput
 from ampav.reallms import ReallmsAsr
 
 
@@ -29,33 +29,6 @@ def load_environment_file(path: Path) -> None:
         os.environ.setdefault(name, value.strip().strip('"').strip("'"))
 
 
-def sanitize_response(response: dict[str, Any]) -> dict[str, Any]:
-    """Remove provider reasoning while retaining normal native response data."""
-    sanitized = json.loads(json.dumps(response))
-    for choice in sanitized.get("choices", []):
-        if not isinstance(choice, dict):
-            continue
-        message = choice.get("message")
-        if isinstance(message, dict):
-            message.pop("reasoning_content", None)
-            provider_fields = message.get("provider_specific_fields")
-            if isinstance(provider_fields, dict):
-                provider_fields.pop("reasoning", None)
-    return sanitized
-
-
-def completion_content(response: dict[str, Any]) -> str | None:
-    """Return the first completion's string content when present."""
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-        return None
-    message = choices[0].get("message")
-    if not isinstance(message, dict):
-        return None
-    content = message.get("content")
-    return content if isinstance(content, str) else None
-
-
 def write_run_record(
     output_dir: Path,
     arguments: argparse.Namespace,
@@ -63,11 +36,10 @@ def write_run_record(
     input_bytes: int,
     started: datetime,
     elapsed_seconds: float,
-    native_response: dict[str, Any],
+    tool_output: ToolOutput,
 ) -> None:
-    """Persist selected native output and credential-free run metadata."""
+    """Persist normalized output and credential-free run metadata."""
     output_dir.mkdir(parents=True, exist_ok=False)
-    response = sanitize_response(native_response)
     manifest = {
         "timestamp": started.isoformat(),
         "elapsed_seconds": round(elapsed_seconds, 3),
@@ -85,8 +57,8 @@ def write_run_record(
         "\n".join(f"{name}: {json.dumps(value)}" for name, value in manifest.items()) + "\n",
         encoding="utf-8",
     )
-    (output_dir / "native_output.json").write_text(
-        json.dumps(response, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    (output_dir / "tool_output.yaml").write_text(
+        tool_output.model_dump_yaml(sort_keys=False), encoding="utf-8"
     )
     (output_dir / "command.txt").write_text(
         shlex.join([sys.executable, *sys.argv]) + "\n", encoding="utf-8"
@@ -97,16 +69,12 @@ def write_run_record(
         "cleanup: no caller-owned inputs or remote resources were created\n",
         encoding="utf-8",
     )
-    choices = response.get("choices")
-    first_choice = choices[0] if isinstance(choices, list) and choices else {}
-    finish_reason = first_choice.get("finish_reason") if isinstance(first_choice, dict) else None
-    content = completion_content(response)
+    transcript = tool_output.output
     (output_dir / "observations.md").write_text(
         "# Observations\n\n"
-        f"- Native finish reason: `{finish_reason}`.\n"
-        f"- String transcript content returned: {'yes' if content else 'no'}.\n"
-        "- Review wording, omissions, insertions, punctuation, and native timing or language metadata.\n"
-        "- Adoption assessment: pending direct review.\n",
+        f"- Transcript text returned: {'yes' if transcript and transcript.text else 'no'}.\n"
+        "- REALLMS did not return word timing, diarization, confidence, or paragraph data.\n"
+        "- Review wording, omissions, insertions, and punctuation.\n",
         encoding="utf-8",
     )
 
@@ -138,11 +106,15 @@ def main() -> None:
         raise ValueError("could not determine audio media type; pass --media-type")
     started = datetime.now(UTC)
     elapsed_started = monotonic()
-    tool = ReallmsAsr(base_url, api_key, timeout=arguments.timeout)
-    response = tool.process(
+    tool = ReallmsAsr(
+        base_url,
+        api_key,
+        model=arguments.model,
+        timeout=arguments.timeout,
+    )
+    output = tool.process(
         audio,
         media_type=media_type,
-        model=arguments.model,
         temperature=arguments.temperature,
     )
     write_run_record(
@@ -152,7 +124,7 @@ def main() -> None:
         len(audio),
         started,
         monotonic() - elapsed_started,
-        response,
+        output,
     )
     print(arguments.output_dir)
 
