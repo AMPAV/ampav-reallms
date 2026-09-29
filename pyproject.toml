@@ -17,6 +17,9 @@ dependencies = [
     "ampav-core>=0.0.20",
 ]
 
+[project.scripts]
+ampav_reallms_asr = "ampav_reallms_cli.asr:main"
+
 [project.urls]
 Homepage = "https://github.com/AMPAV/ampav-reallms"
 Repository = "https://github.com/AMPAV/ampav-reallms.git"
